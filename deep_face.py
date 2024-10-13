@@ -16,6 +16,7 @@ class FaceDetection:
         self.reference_img = None
         self.counter = 0
         self.check_name = ""
+        self.raspi_url = "http://192.168.133.95:5000"
 
     def build_database(self):
         image_dict = {}
@@ -87,9 +88,9 @@ class FaceDetection:
         cv2.destroyAllWindows()
 
     def trigger_door(self, action):
-        url = 'http://<raspberry_pi_ip>:5000/trigger_door'
+        url = f'{self.raspi_url}/trigger_door'
         data = {'action': action}
-        
+
         try:
             response = requests.post(url, json=data)
             if response.status_code == 200:
@@ -99,15 +100,20 @@ class FaceDetection:
         except Exception as e:
             print(f"Error communicating with Raspberry Pi: {e}")
 
-    # Example DeepFace logic
-    def on_face_recognition(self, recognized):
-        if recognized:
-            self.trigger_door('open')
-        else:
-            self.trigger_door('close')
+    def detect_and_trigger(self,username):
+        while True:
+            print("Looking for face...")
+            # Assuming fd.verify_user(username) returns True if face is recognized
+            if self.verify_user(username):  # This is where DeepFace detection is performed
+                print(f"Face recognized for {username}. Opening door...")
+                self.trigger_door('open')  # Trigger the door to open
+            else:
+                print("Face not recognized.")
 
+            # Add a delay to avoid excessive requests
+            time.sleep(1)
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     fd = FaceDetection()
-    if fd.verify_user('vincent'):  # Example for verification
-        fd.start_detection() 
+    username = input("Please enter the username to verify: ")
+    fd.detect_and_trigger(username)
