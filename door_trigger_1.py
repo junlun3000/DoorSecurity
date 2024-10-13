@@ -73,15 +73,19 @@ def toggle_door():
 @app.route('/trigger_door', methods=['POST'])
 def trigger_door():
     action = request.json.get('action')
+    distance = measure_distance()
 
-    if action == 'open' and not door_open:
-        toggle_door()
-        return jsonify({'status': 'door opened'}), 200
-    elif action == 'close' and door_open:
-        toggle_door()
-        return jsonify({'status': 'door closed'}), 200
+    if distance <= distance_threshold:
+        if action == 'open' and not door_open:
+            toggle_door()
+            return jsonify({'status': 'door opened', 'distance': distance}), 200
+        elif action == 'close' and door_open:
+            toggle_door()
+            return jsonify({'status': 'door closed', 'distance': distance}), 200
+        else:
+            return jsonify({'status': 'door is already in the desired state', 'distance': distance}), 400
     else:
-        return jsonify({'status': 'door is already in the desired state'}), 400
+        return jsonify({'status': 'not in range', 'distance': distance}), 403  # 403 Forbidden if not within range
 
 def run_flask():
     app.run(host='0.0.0.0', port=5000)
