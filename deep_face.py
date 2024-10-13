@@ -4,6 +4,7 @@ from deepface import DeepFace
 import os
 import numpy as np
 import time
+import requests
 
 class FaceDetection:
     def __init__(self):
@@ -84,6 +85,27 @@ class FaceDetection:
             print("Timeout. Access denied.")
         self.cap.release()
         cv2.destroyAllWindows()
+
+    def trigger_door(self, action):
+        url = 'http://<raspberry_pi_ip>:5000/trigger_door'
+        data = {'action': action}
+        
+        try:
+            response = requests.post(url, json=data)
+            if response.status_code == 200:
+                print(f"Door {action}ed successfully.")
+            else:
+                print(f"Failed to {action} the door: {response.json()}")
+        except Exception as e:
+            print(f"Error communicating with Raspberry Pi: {e}")
+
+    # Example DeepFace logic
+    def on_face_recognition(self, recognized):
+        if recognized:
+            self.trigger_door('open')
+        else:
+            self.trigger_door('close')
+
 
 if __name__ == "__main__":
     fd = FaceDetection()

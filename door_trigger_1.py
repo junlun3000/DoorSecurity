@@ -1,61 +1,55 @@
-import RPi.GPIO as GPIO  # Import the standard Raspberry Pi GPIO library
+import RPi.GPIO as GPIO
+from flask import Flask, request, jsonify
 from time import sleep
+import threading
 import time
-from deep_face import FaceDetection
+
+app = Flask(__name__)
 
 # GPIO setup
 GPIO.setwarnings(False)
-GPIO.setmode(GPIO.BOARD)   # Use physical pin numbering
+GPIO.setmode(GPIO.BOARD)
 
 # Set up pin 11 for PWM (servo) and pin 13 for button input
-GPIO.setup(11, GPIO.OUT)   # Set pin 11 as an output for the servo
-GPIO.setup(13, GPIO.IN, pull_up_down=GPIO.PUD_UP)  # Set pin 13 as input for the button, with pull-up resistor
-GPIO.setup(15, GPIO.OUT)   # Set pin 15 as red LED
-GPIO.setup(16, GPIO.OUT)   # Set pin 16 as another indicator (for the door state)
+GPIO.setup(11, GPIO.OUT)
+GPIO.setup(13, GPIO.IN, pull_up_down=GPIO.PUD_UP)  # Button with pull-up resistor
+GPIO.setup(15, GPIO.OUT)  # Red LED
+GPIO.setup(16, GPIO.OUT)  # Door indicator
 
 # Set up PWM for the servo
-p = GPIO.PWM(11, 50)  # Set pin 11 as a PWM pin with a frequency of 50Hz
-p.start(0)            # Start PWM with 0% duty cycle
+p = GPIO.PWM(11, 50)  # 50Hz frequency
+p.start(0)
 
-# Set up ultrasonic sensor
+# Ultrasonic sensor setup
 TRIG = 29
 ECHO = 31
 GPIO.setup(TRIG, GPIO.OUT)
 GPIO.setup(ECHO, GPIO.IN)
 
-# Initialize variables
-door_open = False  # Track the state of the door (False = closed, True = open)
-button_pressed = False  # Track the state of the button (to handle button debouncing)
+door_open = False
+button_pressed = False
 last_action_time = 0
-auto_close_delay = 10
-distance_threshold = 10  # Set the threshold distance for ultrasonic sensor (10 cm)
+auto_close_delay = 10  # Time in seconds before auto-closing the door
+distance_threshold = 10  # 10 cm distance threshold
 
 def measure_distance():
-    # Ensure trigger is off
+    # Measure distance using the ultrasonic sensor
     GPIO.output(TRIG, False)
     time.sleep(0.01)
-    
-    # Send a 10us pulse to TRIG
     GPIO.output(TRIG, True)
     time.sleep(0.00001)
     GPIO.output(TRIG, False)
-    
+
     while GPIO.input(ECHO) == 0:
         pulse_start = time.time()
-        
+
     while GPIO.input(ECHO) == 1:
         pulse_end = time.time()
-        
-    # Calculate pulse duration
-    pulse_duration = pulse_end - pulse_start
-    
-    # Convert to distance
-    distance = pulse_duration * 17150
-    distance = round(distance, 2)
-    
-    return distance
 
-# Function to move the servo to the open or closed position
+    pulse_duration = pulse_end - pulse_start
+    distance = pulse_duration * 17150
+    return round(distance, 2)
+
 def toggle_door():
     global door_open, last_action_time
     if door_open:
@@ -63,62 +57,59 @@ def toggle_door():
         p.ChangeDutyCycle(8)  # 0 degrees (door closed)
         GPIO.output(16, GPIO.LOW)
         GPIO.output(15, GPIO.HIGH)
-        sleep(1)                # Wait for the servo to move
-        door_open = False        # Update the state to closed
+        sleep(1)
+        door_open = False
     else:
         print("Opening door...")
         p.ChangeDutyCycle(5)  # 90 degrees (door open)
         GPIO.output(16, GPIO.HIGH)
         GPIO.output(15, GPIO.LOW)
-        sleep(1)                # Wait for the servo to move
-        door_open = True         # Update the state to open
+        sleep(1)
+        door_open = True
         last_action_time = time.time()
-    
+
     p.ChangeDutyCycle(0)
 
-try:
+@app.route('/trigger_door', methods=['POST'])
+def trigger_door():
+    action = request.json.get('action')
 
-    fd = FaceDetection()
-    username = input("Please enter the username: ")
+    if action == 'open' and not door_open:
+        toggle_door()
+        return jsonify({'status': 'door opened'}), 200
+    elif action == 'close' and door_open:
+        toggle_door()
+        return jsonify({'status': 'door closed'}), 200
+    else:
+        return jsonify({'status': 'door is already in the desired state'}), 400
 
-    if fd.verify_user(username):  # Example for verification
-         
+def run_flask():
+    app.run(host='0.0.0.0', port=5000)
 
-
+def button_control():
+    global button_pressed
     while True:
         button_state = GPIO.input(13)  # Read the button state
-        current_time = time.time()
-
-        # Measure distance
-        distance = measure_distance()
-        print(f"Distance: {distance} cm")
-
-        #Inside the door
         if button_state == GPIO.LOW and not button_pressed:  # Button pressed (LOW state)
-                print("Object within range, button pressed, toggling door...")
-                toggle_door()             # Trigger door toggle
-                button_pressed = True     # Mark button as pressed
-
+            print("Button pressed, toggling door...")
+            toggle_door()
+            button_pressed = True  # Mark button as pressed
         elif button_state == GPIO.HIGH and button_pressed:  # Button released (HIGH state)
-                button_pressed = False    # Reset button press state
+            button_pressed = False  # Reset button press state
+        sleep(0.1)  # Small delay to debounce the button
 
-        #Outside the door
-        # Check if object is within 10 cm range
-        if distance < distance_threshold:
-            
+if __name__ == '__main__':
+    # Start the Flask server in a new thread
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.daemon = True
+    flask_thread.start()
 
-        else:
-            p.ChangeDutyCycle(0)
-        # Auto-close after delay
-        # if door_open and (current_time - last_action_time >= auto_close_delay):
-        #     print("The door has been open for more than 10 seconds, closing now.")
-        #     toggle_door()
+    # Main loop for button control
+    try:
+        button_control()  # Handle button input in the main thread
+    except KeyboardInterrupt:
+        pass
 
-        sleep(0.1)  # Short delay to debounce the button and prevent bouncing effects
-
-except KeyboardInterrupt:  # Exit the loop when Ctrl+C is pressed
-    pass
-
-# Clean up everything
-p.stop()            # Stop the PWM
-GPIO.cleanup()      # Reset the GPIO pins to their default state
+    # Clean up on exit
+    p.stop()
+    GPIO.cleanup()
