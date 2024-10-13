@@ -103,7 +103,7 @@ if __name__ == '__main__':
     flask_thread = threading.Thread(target=run_flask)
     flask_thread.daemon = True
     flask_thread.start()
-
+    
     # Main loop for button control
     try:
         button_control()  # Handle button input in the main thread

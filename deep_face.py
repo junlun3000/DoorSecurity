@@ -16,7 +16,7 @@ class FaceDetection:
         self.reference_img = None
         self.counter = 0
         self.check_name = ""
-        self.raspi_url = "http://192.168.133.95:5000"
+        self.raspi_url = "http://192.168.137.225:5000"
 
     def build_database(self):
         image_dict = {}
@@ -33,7 +33,7 @@ class FaceDetection:
             self.check_name = name
             return True
         else:
-            print("You have no access.")
+            print(f"{name}, you have no access to the store.")
             return False
 
     def check_face(self, frame):
@@ -41,7 +41,7 @@ class FaceDetection:
         try:
             result = DeepFace.verify(frame, self.reference_img.copy())
             print(result)
-            if result['verified'] and result['distance'] <= 0.3:
+            if result['verified'] and result['distance'] <= 0.35:
                 self.face_match = True
             else:
                 self.face_match = False
@@ -55,9 +55,7 @@ class FaceDetection:
             start = input("")
             if start == 'S':
                 break
-
         start_time = time.time()
-
         while (time.time() - start_time < 30):
             ret, frame = self.cap.read()
             if ret:
@@ -67,18 +65,15 @@ class FaceDetection:
                     except ValueError:
                         pass
                 self.counter += 1
-
                 if self.face_match:
                     cv2.putText(frame, "MATCH!", (20, 450), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 3)
                     print("Face matched")
+                    cv2.imshow("video", frame)
+                    cv2.waitKey(1000)
+                    return True
                 else:
                     cv2.putText(frame, "NO MATCH!", (20, 450), cv2.FONT_HERSHEY_SIMPLEX, 2, (0, 0, 255), 3)
-                    
-                cv2.imshow("video", frame)
-                if self.face_match:
-                    cv2.waitKey(1000)
-                    break
-                
+                    cv2.imshow("video", frame)
             key = cv2.waitKey(1)
             if key == ord("q"):
                 break
@@ -86,6 +81,7 @@ class FaceDetection:
             print("Timeout. Access denied.")
         self.cap.release()
         cv2.destroyAllWindows()
+        return False
 
     def trigger_door(self, action):
         url = f'{self.raspi_url}/trigger_door'
@@ -100,18 +96,22 @@ class FaceDetection:
         except Exception as e:
             print(f"Error communicating with Raspberry Pi: {e}")
 
-    def detect_and_trigger(self,username):
-        while True:
-            print("Looking for face...")
-            # Assuming fd.verify_user(username) returns True if face is recognized
-            if self.verify_user(username):  # This is where DeepFace detection is performed
-                print(f"Face recognized for {username}. Opening door...")
-                self.trigger_door('open')  # Trigger the door to open
-            else:
-                print("Face not recognized.")
+    def detect_and_trigger(self, username):
 
-            # Add a delay to avoid excessive requests
-            time.sleep(1)
+        if self.verify_user(username):
+            result = self.start_detection()
+            if result:
+                print("Face matched. Opening door...")
+                self.trigger_door('open')
+                
+        # print("Looking for face...")
+        # # Assuming fd.verify_user(username) returns True if face is recognized
+        # if self.verify_user(username):  # This is where DeepFace detection is performed
+        #     print(f"Face recognized for {username}. Opening door...")
+        #     self.trigger_door('open')  # Trigger the door to open
+        # else:
+        #     print("Face not recognized.")
+
 
 if __name__ == '__main__':
     fd = FaceDetection()
