@@ -59,7 +59,7 @@ class FaceDetection:
         while (time.time() - start_time < 30):
             ret, frame = self.cap.read()
             if ret:
-                if self.counter % 50 == 0:  # Check every 40th frame
+                if self.counter % 70 == 0:  # Check every 40th frame
                     try:
                         threading.Thread(target=self.check_face, daemon=True, args=(frame.copy(),)).start()
                     except ValueError:
@@ -92,7 +92,7 @@ class FaceDetection:
             if response.status_code == 200:
                 print(f"Door {action}ed successfully.")
             else:
-                print(f"Failed to {action} the door: {response.json()}")
+                print(f"{response.json()['status']}")
         except Exception as e:
             print(f"Error communicating with Raspberry Pi: {e}")
 
